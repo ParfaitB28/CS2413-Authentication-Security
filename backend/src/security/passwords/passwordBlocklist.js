@@ -1,8 +1,8 @@
-
 const BLOCKED_PASSWORDS = new Set([
     "password",
     "password123",
     "password123!",
+    "password123456!",
     "123456",
     "12345678",
     "qwerty",
