@@ -1,0 +1,6 @@
+attack,attempt,http_status,successful_login,response_time_seconds
+Dictionary,1,401,False,0.155238
+Dictionary,2,401,False,0.039532
+Dictionary,3,401,False,0.042472
+Dictionary,4,401,False,0.03901
+Dictionary,5,200,True,0.046558

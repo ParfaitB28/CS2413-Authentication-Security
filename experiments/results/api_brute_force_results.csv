@@ -1,0 +1,6 @@
+attack,attempt,http_status,successful_login,response_time_seconds
+Brute Force,1,401,False,0.122653
+Brute Force,2,401,False,0.04442
+Brute Force,3,401,False,0.043372
+Brute Force,4,401,False,0.049073
+Brute Force,5,200,True,0.041403

@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
-
+const { checkPasswordSecurity } = require('./src/security/passwords/passwordSecurity');
 const app = express();
 const port = 3000;
 
@@ -50,6 +50,15 @@ app.post('/register', express.json({ limit: '4kb' }), async (req, res) => {
       typeof password !== 'string' || password.length < 15 || password.length > 128) {
     return res.status(400).json({
       error: 'Enter a valid email and a password between 15 and 128 characters.',
+    });
+  }
+
+  const passwordCheck = checkPasswordSecurity(password);
+
+  if (!passwordCheck.valid) {
+    return res.status(400).json({
+      error: 'Password does not meet security requirements.',
+      details: passwordCheck.errors,
     });
   }
 
