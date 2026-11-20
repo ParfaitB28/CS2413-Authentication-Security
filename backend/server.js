@@ -5,6 +5,12 @@ const app = express();
 const port = 3000;
 
 const session = require('express-session');
+const { loginRateLimiter } = require('./src/security/loginRateLimiter');
+const {
+  checkAccountLockout,
+  recordFailedLogin,
+  resetFailedLogins
+} = require('./src/security/accountLockout');
 
 app.use(session({
   name: 'cs2413.sid',
@@ -86,13 +92,26 @@ app.post('/register', express.json({ limit: '4kb' }), async (req, res) => {
   }
 });
 
-app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
+app.post('/login', loginRateLimiter, express.json({ limit: '4kb' }), async (req, res) => {
   const { email, password } = req.body ?? {};
 
   if (typeof email !== 'string' || email.length > 254 ||
       typeof password !== 'string' || password.length > 128) {
     return res.status(400).json({ error: 'Enter an email and password.' });
   }
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const lockoutStatus = checkAccountLockout(normalizedEmail);
+
+
+if (lockoutStatus.locked || lockoutStatus.backoff) {
+  res.set('Retry-After', String(lockoutStatus.retryAfter));
+
+  return res.status(429).json({
+    error: 'Too many failed login attempts. Please try again later.'
+  });
+}
+
 
   try {
     const result = await db.query(
@@ -108,8 +127,21 @@ app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
     const actual = await hashPassword(password, salt, 64);
 
     if (!stored || expected.length !== actual.length ||
-        !timingSafeEqual(expected, actual)) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    !timingSafeEqual(expected, actual)) {
+
+      const failureStatus = recordFailedLogin(normalizedEmail);
+
+      if (failureStatus.locked) {
+        res.set('Retry-After', String(failureStatus.retryAfter));
+
+        return res.status(429).json({
+          error: 'Too many failed login attempts. Please try again later.'
+        });
+      }
+
+      return res.status(401).json({
+        error: 'Invalid email or password.'
+      });
     }
 
     return req.session.regenerate((error) => {
@@ -117,7 +149,8 @@ app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
     return res.status(500).json({ error: 'Could not start session.' });
   }
 
-  req.session.email = email.trim().toLowerCase();
+  resetFailedLogins(normalizedEmail);
+  req.session.email = normalizedEmail;
   return res.json({ message: 'Signed in.' });
 });
 

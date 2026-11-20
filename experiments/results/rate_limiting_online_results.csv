@@ -1,0 +1,25 @@
+mode,attempt,status,reason,response_ms
+baseline,1,401,"wrong-password",79.57
+baseline,2,401,"wrong-password",6.90
+baseline,3,401,"wrong-password",2.16
+baseline,4,401,"wrong-password",1.73
+baseline,5,401,"wrong-password",1.68
+baseline,6,401,"wrong-password",1.62
+baseline,7,401,"wrong-password",1.28
+baseline,8,401,"wrong-password",1.26
+baseline,9,401,"wrong-password",1.40
+baseline,10,401,"wrong-password",2.12
+baseline,11,401,"wrong-password",1.04
+baseline,12,401,"wrong-password",0.86
+hardened,1,401,"wrong-password",3.84
+hardened,2,429,"backoff",1.07
+hardened,3,429,"backoff",0.81
+hardened,4,429,"backoff",0.83
+hardened,5,429,"backoff",0.77
+hardened,6,429,"backoff",0.87
+hardened,7,429,"backoff",0.86
+hardened,8,429,"backoff",0.73
+hardened,9,429,"backoff",0.79
+hardened,10,429,"backoff",1.04
+hardened,11,429,"Too many login attempts. Please try again later.",0.99
+hardened,12,429,"Too many login attempts. Please try again later.",0.83
