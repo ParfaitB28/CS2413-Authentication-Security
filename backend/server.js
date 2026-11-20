@@ -131,7 +131,7 @@ if (lockoutStatus.locked || lockoutStatus.backoff) {
 
       const failureStatus = recordFailedLogin(normalizedEmail);
 
-      if (failureStatus.locked || failureStatus.backoff) {
+      if (failureStatus.locked) {
         res.set('Retry-After', String(failureStatus.retryAfter));
 
         return res.status(429).json({
