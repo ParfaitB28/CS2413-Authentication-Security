@@ -1,0 +1,15 @@
+{
+  "name": "login-security-experiments",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline cracking + latency experiment harness (Mady).",
+  "scripts": {
+    "seed": "node seedPasswords.js",
+    "export-dump": "node exportDump.js",
+    "bench": "node benchmarkLatency.js"
+  },
+  "dependencies": {
+    "argon2": "^0.31.2",
+    "bcrypt": "^5.1.1"
+  }
+}

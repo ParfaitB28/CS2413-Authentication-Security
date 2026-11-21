@@ -8,9 +8,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { hashPassword, verifyPassword } = require('../src/hashing');
-const strength = require('../src/passwordStrength');
-const { SCHEMES } = require('../src/config');
+const { hashPassword, verifyPassword } = require('../src/security/hashing');
+const strength = require('../src/security/passwordStrength');
+const { SCHEMES } = require('../src/security/config');
 
 test('bcrypt: correct password verifies, wrong one fails', async () => {
   const h = await hashPassword('correct-horse-battery-staple-7', { scheme: SCHEMES.BCRYPT, bcryptCost: 8 });

@@ -16,9 +16,12 @@
  */
 
 const crypto = require('crypto');
+const { promisify } = require('util');
 const bcrypt = require('bcrypt');
 const argon2 = require('argon2');
 const config = require('./config');
+
+const scryptAsync = promisify(crypto.scrypt);
 
 /**
  * Apply the optional pepper. Returns the password unchanged when no pepper is
@@ -104,4 +107,82 @@ async function verifyPassword(password, record) {
   return false;
 }
 
-module.exports = { hashPassword, verifyPassword, applyPepper };
+/* ------------------------------------------------------------------ *
+ * Storage helpers used by the app (register / login).
+ *
+ * The database stores a single self-describing string in users.password_hash:
+ *   - bcrypt  -> "$2b$..."        (new accounts, default)
+ *   - argon2  -> "$argon2id$..."  (new accounts when AUTH_SCHEME=argon2)
+ *   - legacy  -> "scrypt:salt:hash" (accounts created before this change)
+ * verifyAgainstStorage detects the format, so old scrypt accounts keep working
+ * while new accounts use the hardened scheme.
+ * ------------------------------------------------------------------ */
+
+// Cached dummy hash so a login for a non-existent user still spends roughly the
+// same time as a real verify (reduces user-enumeration timing leaks).
+let dummyHashPromise;
+function getDummyHash() {
+  if (!dummyHashPromise) {
+    dummyHashPromise = bcrypt.hash('invalid-placeholder-password', config.BCRYPT_COST);
+  }
+  return dummyHashPromise;
+}
+
+/**
+ * Produce the string to store in users.password_hash for a new/updated account.
+ * Uses the hardened scheme (bcrypt by default, argon2 if configured). The
+ * baseline scheme is for experiments only and is rejected here.
+ * @param {string} password
+ * @returns {Promise<string>}
+ */
+async function hashForStorage(password) {
+  const scheme = config.ACTIVE_SCHEME === config.SCHEMES.ARGON2
+    ? config.SCHEMES.ARGON2
+    : config.SCHEMES.BCRYPT;
+  const r = await hashPassword(password, { scheme });
+  return r.hash; // bcrypt/argon2 output is self-identifying
+}
+
+/**
+ * Verify a plaintext password against whatever format is stored. Always runs a
+ * hash operation (even when the user is missing) to keep timing uniform.
+ * @param {string} password
+ * @param {string|undefined|null} stored  value from users.password_hash
+ * @returns {Promise<boolean>}
+ */
+async function verifyAgainstStorage(password, stored) {
+  if (typeof stored !== 'string' || stored.length === 0) {
+    await bcrypt.compare(String(password), await getDummyHash());
+    return false;
+  }
+
+  const material = applyPepper(password);
+
+  if (stored.startsWith('$2a$') || stored.startsWith('$2b$') || stored.startsWith('$2y$')) {
+    return bcrypt.compare(material, stored);
+  }
+
+  if (stored.startsWith('$argon2')) {
+    return argon2.verify(stored, material);
+  }
+
+  if (stored.startsWith('scrypt:')) {
+    // Legacy accounts were hashed from the raw password (no pepper existed then).
+    const [, saltHex, hashHex] = stored.split(':');
+    if (!saltHex || !hashHex) return false;
+    const salt = Buffer.from(saltHex, 'hex');
+    const expected = Buffer.from(hashHex, 'hex');
+    const actual = await scryptAsync(password, salt, expected.length);
+    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+  }
+
+  return false;
+}
+
+module.exports = {
+  hashPassword,
+  verifyPassword,
+  applyPepper,
+  hashForStorage,
+  verifyAgainstStorage,
+};

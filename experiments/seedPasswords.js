@@ -15,8 +15,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { hashPassword } = require('../src/hashing');
-const config = require('../src/config');
+const { hashPassword } = require('../backend/src/security/hashing');
+const config = require('../backend/src/security/config');
 
 // Controlled password set, tagged by strength tier.
 const TEST_PASSWORDS = [
