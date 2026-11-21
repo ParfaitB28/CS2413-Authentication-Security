@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node --env-file=.env server.js"
   },
   "dependencies": {
     "express": "^5.1.0",
     "express-rate-limit": "^8.7.5",
     "express-session": "^1.19.0",
+    "otplib": "13.6.0",
     "pg": "^8.23.1"
   }
 }
