@@ -1,0 +1,4 @@
+attack,attempts,successful_logins,password_found,time_seconds
+Dictionary Attack,5,1,True,0.802
+Brute Force Attack,12,1,True,0.001031
+Credential Stuffing,4,2,False,0.000515

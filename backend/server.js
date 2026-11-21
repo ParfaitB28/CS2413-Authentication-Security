@@ -2,10 +2,17 @@ const express = require('express');
 const { Pool } = require('pg');
 const { createEnrollment } = require('./src/security/mfa/totp');
 const { verifyAccountCode } = require('./src/security/mfa/verify-account');
+const { checkPasswordSecurity } = require('./src/security/passwords/passwordSecurity');
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
 const session = require('express-session');
+const { loginRateLimiter } = require('./src/security/loginRateLimiter');
+const {
+  checkAccountLockout,
+  recordFailedLogin,
+  resetFailedLogins
+} = require('./src/security/accountLockout');
 
 app.use(session({
   name: 'cs2413.sid',
@@ -55,6 +62,15 @@ app.post('/register', express.json({ limit: '4kb' }), async (req, res) => {
     });
   }
 
+  const passwordCheck = checkPasswordSecurity(password);
+
+  if (!passwordCheck.valid) {
+    return res.status(400).json({
+      error: 'Password does not meet security requirements.',
+      details: passwordCheck.errors,
+    });
+  }
+
   try {
     const salt = randomBytes(16);
     const hash = await hashPassword(password, salt, 64);
@@ -79,13 +95,26 @@ app.post('/register', express.json({ limit: '4kb' }), async (req, res) => {
   }
 });
 
-app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
+app.post('/login', loginRateLimiter, express.json({ limit: '4kb' }), async (req, res) => {
   const { email, password } = req.body ?? {};
 
   if (typeof email !== 'string' || email.length > 254 ||
       typeof password !== 'string' || password.length > 128) {
     return res.status(400).json({ error: 'Enter an email and password.' });
   }
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const lockoutStatus = checkAccountLockout(normalizedEmail);
+
+
+if (lockoutStatus.locked || lockoutStatus.backoff) {
+  res.set('Retry-After', String(lockoutStatus.retryAfter));
+
+  return res.status(429).json({
+    error: 'Too many failed login attempts. Please try again later.'
+  });
+}
+
 
   try {
     const result = await db.query(
@@ -101,8 +130,21 @@ app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
     const actual = await hashPassword(password, salt, 64);
 
     if (!stored || expected.length !== actual.length ||
-        !timingSafeEqual(expected, actual)) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    !timingSafeEqual(expected, actual)) {
+
+      const failureStatus = recordFailedLogin(normalizedEmail);
+
+      if (failureStatus.locked) {
+        res.set('Retry-After', String(failureStatus.retryAfter));
+
+        return res.status(429).json({
+          error: 'Too many failed login attempts. Please try again later.'
+        });
+      }
+
+      return res.status(401).json({
+        error: 'Invalid email or password.'
+      });
     }
 
     return req.session.regenerate((error) => {
@@ -110,12 +152,12 @@ app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
     return res.status(500).json({ error: 'Could not start session.' });
   }
 
+  resetFailedLogins(normalizedEmail);
   const user = result.rows[0];
 
-  if(user.mfa_enabled){
+  if (user.mfa_enabled) {
     req.session.pendingUserId = user.id;
     req.session.pendingExpiresAt = Date.now() + 5 * 60 * 1000;
-   
 
     return res.json({
       mfaRequired: true,
@@ -123,7 +165,7 @@ app.post('/login', express.json({ limit: '4kb' }), async (req, res) => {
     });
   }
 
-  req.session.email = email.trim().toLowerCase();
+  req.session.email = normalizedEmail;
   return res.json({ message: 'Signed in.' });
 });
 

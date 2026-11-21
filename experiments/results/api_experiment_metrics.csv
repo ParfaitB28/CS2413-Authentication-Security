@@ -1,0 +1,4 @@
+experiment,test,total_requests,successful_logins,failed_logins,login_success_rate_percent,tests_passed,tests_failed,test_pass_rate_percent,avg_response_time_seconds
+API Attack Test,Brute Force,5,1,4,20.0,,,,0.060184
+API Attack Test,Dictionary,5,1,4,20.0,,,,0.064562
+Password Security Validation,Registration API,4,,,,4,0,100.0,0.065091
