@@ -1,9 +1,7 @@
 'use strict';
 
-/**
- * test/hashing.test.js — proves the three core guarantees of Mady's module.
- * Run with: npm test   (node --test)
- */
+// Tests for the hashing and strength code.
+// Run with: node --test
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -23,25 +21,25 @@ test('argon2: correct password verifies', async () => {
   assert.strictEqual(await verifyPassword('Gx9$kLm2@qZr4!vW', h), true);
 });
 
-test('salt works: identical passwords produce distinct hashes (H4)', async () => {
+test('salt works: same password gives different hashes', async () => {
   const a = await hashPassword('samePassword123!', { scheme: SCHEMES.BCRYPT, bcryptCost: 8 });
   const b = await hashPassword('samePassword123!', { scheme: SCHEMES.BCRYPT, bcryptCost: 8 });
   assert.notStrictEqual(a.hash, b.hash);
 });
 
-test('baseline is unsalted: identical passwords collide (shows the weakness)', async () => {
+test('baseline has no salt: same password gives the same hash', async () => {
   const a = await hashPassword('samePassword123!', { scheme: SCHEMES.BASELINE });
   const b = await hashPassword('samePassword123!', { scheme: SCHEMES.BASELINE });
   assert.strictEqual(a.hash, b.hash);
 });
 
-test('strength policy rejects weak and breached passwords', () => {
+test('strength check rejects weak and breached passwords', () => {
   assert.strictEqual(strength.evaluate('password').ok, false);
   assert.strictEqual(strength.evaluate('123456').ok, false);
   assert.strictEqual(strength.evaluate('short').ok, false);
 });
 
-test('strength policy accepts a strong password', () => {
+test('strength check accepts a strong password', () => {
   const r = strength.evaluate('vT#8pR^2mNb5&xQ1zL');
   assert.strictEqual(r.ok, true);
   assert.ok(r.score >= 3);

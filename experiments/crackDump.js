@@ -1,24 +1,14 @@
 'use strict';
 
-/**
- * crackDump.js — self-contained offline dictionary attack (Mady).
- *
- * Does the same job as Hashcat/John but in Node, so it runs anywhere bcrypt and
- * argon2 are installed. It loads the seeded accounts for a scheme, tries every
- * word in the wordlist against each stored hash, and reports:
- *   - % cracked overall and per strength tier
- *   - which accounts fell
- *   - total guesses, elapsed time, and effective guesses/sec
- *   - time-to-first-crack
- *
- * Usage (run from the experiments/ folder, after seedPasswords.js):
- *   node crackDump.js sha256-unsalted
- *   node crackDump.js bcrypt
- *   node crackDump.js argon2
- *
- * Matching is done on the plaintext in the seeded lab dataset, which is safe
- * here because these are known test passwords in a controlled experiment.
- */
+// A simple offline dictionary attack, written in Node so it runs without having
+// to install Hashcat or John. It loads the seeded accounts for one scheme,
+// tries every word in the wordlist against each stored hash, and reports how
+// many it cracked, how fast, and which ones.
+//
+// Run from the experiments folder after seedPasswords.js:
+//   node crackDump.js sha256-unsalted
+//   node crackDump.js bcrypt
+//   node crackDump.js argon2
 
 const fs = require('fs');
 const path = require('path');
@@ -26,6 +16,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const argon2 = require('argon2');
 
+// Does this guess match the stored hash?
 async function matches(scheme, word, hash) {
   if (scheme === 'sha256-unsalted') {
     return crypto.createHash('sha256').update(word).digest('hex') === hash;
@@ -66,6 +57,7 @@ async function main() {
 
   const start = process.hrtime.bigint();
 
+  // go account by account, trying each word until one matches
   for (const acc of accounts) {
     tiers[acc.tier] = tiers[acc.tier] || { total: 0, cracked: 0 };
     tiers[acc.tier].total++;
@@ -111,6 +103,7 @@ async function main() {
     console.log('\nNo accounts recovered.');
   }
 
+  // save the numbers so they can go into the report / a chart
   const summary = {
     scheme,
     wordlistSize: words.length,
