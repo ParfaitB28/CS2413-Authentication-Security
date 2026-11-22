@@ -1,0 +1,8 @@
+mode,attempt,login_status,mfa_required,me_status,access_granted,elapsed_ms
+mfa_off,1,200,false,200,true,47.40
+mfa_off,2,200,false,200,true,34.17
+mfa_off,3,200,false,200,true,29.35
+mfa_on_password_only,1,200,true,401,false,29.10
+mfa_on_password_only,2,200,true,401,false,28.19
+mfa_on_password_only,3,200,true,401,false,28.35
+mfa_on_valid_code,1,200,true,200,true,88.30
