@@ -1,21 +1,13 @@
 'use strict';
 
-/**
- * experiments/exportDump.js
- *
- * Simulates "attacker steals the database" by exporting each seeded account set
- * into the hash formats the cracking tools expect:
- *
- *   - sha256-unsalted -> out/dump.sha256.txt   (username:hexhash)  [Hashcat -m 1400]
- *   - bcrypt          -> out/dump.bcrypt.txt   ($2b$...)           [Hashcat -m 3200]
- *   - argon2          -> out/dump.argon2.txt   ($argon2id$...)     [John --format=argon2]
- *
- * Also prints what the attacker actually obtains, so the report can show the
- * difference between "plaintext/fast hash" and "salted slow hash".
- *
- * Usage:
- *   node experiments/exportDump.js            # exports every accounts.*.json found
- */
+// Pretends an attacker stole the database. Takes the seeded accounts and writes
+// them out in the formats cracking tools read:
+//   sha256-unsalted -> out/dump.sha256.txt
+//   bcrypt          -> out/dump.bcrypt.txt
+//   argon2          -> out/dump.argon2.txt
+// It also prints what the attacker would actually see for each one.
+//
+// Run: node exportDump.js
 
 const fs = require('fs');
 const path = require('path');
@@ -29,20 +21,21 @@ function exportScheme(scheme) {
 
   const lines = records.map((r) => {
     if (scheme === 'sha256-unsalted') return `${r.username}:${r.hash}`;
-    return `${r.username}:${r.hash}`; // bcrypt/argon2 strings already self-contained
+    return `${r.username}:${r.hash}`; // bcrypt/argon2 strings already hold everything
   });
 
   const dumpFile = path.join(outDir, `dump.${scheme.replace('sha256-unsalted', 'sha256')}.txt`);
   fs.writeFileSync(dumpFile, lines.join('\n') + '\n');
 
-  // What does the attacker see?
+  // Show what the attacker ends up with.
   const sample = records[0];
   const distinctHashes = new Set(records.map((r) => r.hash)).size;
   console.log(`\n[${scheme}] -> ${dumpFile}`);
   console.log(`  rows: ${records.length}, distinct hashes: ${distinctHashes}`);
   console.log(`  example: ${sample.username} -> ${String(sample.hash).slice(0, 48)}${sample.hash.length > 48 ? '…' : ''}`);
 
-  // Salt check: do the two "weak" accounts that share a password collide?
+  // If any two accounts share a password, check whether their hashes match.
+  // They match only when there's no salt, which is the point we're showing.
   const byPlain = {};
   for (const r of records) (byPlain[r.plaintext] = byPlain[r.plaintext] || []).push(r.hash);
   const reused = Object.entries(byPlain).filter(([, hs]) => hs.length > 1);

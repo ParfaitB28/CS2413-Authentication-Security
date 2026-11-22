@@ -1,24 +1,20 @@
 'use strict';
 
-/**
- * experiments/seedPasswords.js
- *
- * Builds the controlled test-account set used across ALL experiments: the same
- * weak/medium/strong passwords hashed under each scheme, so cracking results
- * are comparable. Writes JSON records to experiments/out/accounts.<scheme>.json
- *
- * Usage:
- *   AUTH_SCHEME=sha256-unsalted node experiments/seedPasswords.js
- *   AUTH_SCHEME=bcrypt BCRYPT_COST=12 node experiments/seedPasswords.js
- *   AUTH_SCHEME=argon2 node experiments/seedPasswords.js
- */
+// Makes the test accounts used by the cracking experiments.
+// Same weak/medium/strong passwords hashed with whichever scheme is set, so
+// the results can be compared fairly. Saves to experiments/out/accounts.<scheme>.json
+//
+// Run it once per scheme, e.g. (PowerShell):
+//   $env:AUTH_SCHEME="sha256-unsalted"; node seedPasswords.js
+//   $env:AUTH_SCHEME="bcrypt"; node seedPasswords.js
+//   $env:AUTH_SCHEME="argon2"; node seedPasswords.js
 
 const fs = require('fs');
 const path = require('path');
-const { hashPassword } = require('../src/hashing');
-const config = require('../src/config');
+const { hashPassword } = require('../backend/src/security/hashing');
+const config = require('../backend/src/security/config');
 
-// Controlled password set, tagged by strength tier.
+// Test passwords grouped by how strong they are.
 const TEST_PASSWORDS = [
   { tier: 'weak', username: 'weak1', password: 'password' },
   { tier: 'weak', username: 'weak2', password: '123456' },
@@ -42,7 +38,7 @@ async function main() {
     records.push({
       username: row.username,
       tier: row.tier,
-      plaintext: row.password, // kept ONLY because this is a controlled lab dataset
+      plaintext: row.password, // only stored because these are fake test accounts
       scheme: h.scheme,
       hash: h.hash,
       params: h.params,

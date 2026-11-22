@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node --env-file=.env server.js"
   },
   "dependencies": {
+    "argon2": "^0.31.2",
+    "bcrypt": "^5.1.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.5",
     "express-session": "^1.19.0",
-    "pg": "^8.23.1"
+    "otplib": "13.6.0",
+    "pg": "^8.23.1",
+    "zxcvbn": "^4.4.2"
   }
 }

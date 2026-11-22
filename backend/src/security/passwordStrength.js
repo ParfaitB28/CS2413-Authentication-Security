@@ -1,18 +1,11 @@
 'use strict';
 
-/**
- * passwordStrength.js — Mady's deliverable (password-strength policy).
- *
- * Two layers:
- *   1. zxcvbn entropy estimation — rejects guessable passwords, returns a
- *      0..4 score plus crack-time estimates and human feedback.
- *   2. Breached-password blocklist — rejects known-leaked passwords. Works
- *      offline against data/breached-sample.txt; can also check the live
- *      Have I Been Pwned range API via k-anonymity (no password leaves the app).
- *
- * Shrinking the realistic keyspace at registration is what makes the offline
- * cracking numbers meaningful: weak choices never enter the DB.
- */
+// Password strength checking.
+// Two checks:
+//   1. zxcvbn - estimates how guessable a password is (score 0..4).
+//   2. A blocklist of passwords that have shown up in known breaches.
+// The idea is to stop weak passwords from ever getting saved, so they can't
+// be cracked later.
 
 const fs = require('fs');
 const path = require('path');
@@ -21,7 +14,7 @@ const https = require('https');
 const zxcvbn = require('zxcvbn');
 const config = require('./config');
 
-// Load the offline breached-password sample once.
+// Load the breached-password list once and keep it in memory.
 let BREACHED = null;
 function loadBreached() {
   if (BREACHED) return BREACHED;
@@ -34,17 +27,14 @@ function loadBreached() {
       if (p) BREACHED.add(p.toLowerCase());
     }
   } catch (_) {
-    // sample missing -> empty set; policy still runs on zxcvbn + length
+    // if the file isn't there, just skip the blocklist and use zxcvbn + length
   }
   return BREACHED;
 }
 
-/**
- * Check a password locally (no network).
- * @param {string} password
- * @param {string[]} [userInputs] e.g. [username, email] to penalise
- * @returns {{ok:boolean, score:number, errors:string[], feedback:object, crackTimes:object}}
- */
+// Check a password without using the network.
+// userInputs lets us pass things like the username/email so zxcvbn penalises
+// passwords based on them.
 function evaluate(password, userInputs = []) {
   const errors = [];
   const pw = String(password || '');
@@ -74,12 +64,8 @@ function evaluate(password, userInputs = []) {
   };
 }
 
-/**
- * Optional: check Have I Been Pwned using k-anonymity. Only the first 5 chars
- * of the SHA-1 are sent; the full password never leaves the process.
- * @param {string} password
- * @returns {Promise<number>} breach count (0 = not found)
- */
+// Optional extra check against Have I Been Pwned. It only sends the first 5
+// characters of the SHA-1, so the actual password never leaves the program.
 function checkHIBP(password) {
   return new Promise((resolve, reject) => {
     const sha1 = crypto.createHash('sha1').update(password).digest('hex').toUpperCase();
