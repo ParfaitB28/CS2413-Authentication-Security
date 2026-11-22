@@ -3,8 +3,10 @@
 API Experiment Results Analyzer
 CS2413 - Information Security Final Project
 
-Analyzes actual local API attack tests and password-security tests.
-Keeps API measurements separate from offline attack simulations.
+Compares original API attack measurements with updated
+measurements from the combined authentication application.
+
+Original results are preserved.
 """
 
 import csv
@@ -14,99 +16,142 @@ from statistics import mean
 BASE_DIR = Path(__file__).resolve().parent.parent
 RESULTS_DIR = BASE_DIR / "results"
 
-BRUTE_FORCE_FILE = RESULTS_DIR / "api_brute_force_results.csv"
-DICTIONARY_FILE = RESULTS_DIR / "api_dictionary_results.csv"
-PASSWORD_FILE = RESULTS_DIR / "api_password_security_results.csv"
+OUTPUT_FILE = RESULTS_DIR / "api_experiment_metrics_after.csv"
 
-OUTPUT_FILE = RESULTS_DIR / "api_experiment_metrics.csv"
+EXPERIMENTS = [
+    ("Brute Force", "api_brute_force_results.csv",
+     "api_brute_force_after_results.csv"),
+    ("Dictionary", "api_dictionary_results.csv",
+     "api_dictionary_after_results.csv"),
+]
 
 
-def read_csv(file_path):
-    if not file_path.exists():
-        raise FileNotFoundError(f"Missing results file: {file_path}")
+def read_csv(filename):
+    path = RESULTS_DIR / filename
 
-    with file_path.open("r", newline="", encoding="utf-8") as file:
+    if not path.exists():
+        raise FileNotFoundError(f"Missing results file: {path}")
+
+    with path.open("r", newline="", encoding="utf-8") as file:
         return list(csv.DictReader(file))
 
 
-def analyze_attack(file_path, attack_name):
-    rows = read_csv(file_path)
+def get_boolean(row, possible_columns):
+    for column in possible_columns:
+        if column in row and row[column] != "":
+            return row[column].strip().lower() == "true"
+
+    raise ValueError(
+        f"Could not find a success column. "
+        f"Expected one of: {possible_columns}"
+    )
+
+
+def analyze_attack(filename, attack_name, phase):
+    rows = read_csv(filename)
 
     if not rows:
-        raise ValueError(f"No results found in {file_path.name}")
+        raise ValueError(f"No results found in {filename}")
 
-    total = len(rows)
     successful = sum(
-        row["successful_login"].strip().lower() == "true"
+        get_boolean(
+            row,
+            ["authenticated_access", "successful_login"]
+        )
         for row in rows
     )
+
+    total = len(rows)
     failed = total - successful
 
     response_times = [
-        float(row["response_time_seconds"]) for row in rows
+        float(row["response_time_seconds"])
+        for row in rows
+        if row.get("response_time_seconds")
     ]
 
+    retries = sum(
+        int(row.get("rate_limit_retries", 0) or 0)
+        for row in rows
+    )
+
+    blocked = sum(
+        get_boolean(row, ["blocked"])
+        for row in rows
+        if row.get("blocked") not in (None, "")
+    )
+
     return {
+        "phase": phase,
         "experiment": "API Attack Test",
         "test": attack_name,
-        "total_requests": total,
-        "successful_logins": successful,
-        "failed_logins": failed,
-        "login_success_rate_percent": round(
-            successful / total * 100, 2
-        ),
-        "tests_passed": "",
-        "tests_failed": "",
-        "test_pass_rate_percent": "",
-        "avg_response_time_seconds": round(
+        "total_attempts": total,
+        "successful_authenticated_access": successful,
+        "failed_or_unconfirmed_attempts": failed,
+        "success_rate_percent": round(successful / total * 100, 2),
+        "average_response_time_seconds": round(
             mean(response_times), 6
-        ),
+        ) if response_times else 0,
+        "rate_limit_retries": retries,
+        "blocked_attempts": blocked,
     }
 
 
 def analyze_password_security():
-    rows = read_csv(PASSWORD_FILE)
+    filename = "api_password_security_results.csv"
+    rows = read_csv(filename)
 
     if not rows:
         raise ValueError("No password-security results found.")
 
-    total = len(rows)
     passed = sum(
         row["passed"].strip().lower() == "true"
         for row in rows
     )
-    failed = total - passed
 
-    response_times = [
-        float(row["response_time_seconds"]) for row in rows
-    ]
+    total = len(rows)
 
     return {
+        "phase": "Existing",
         "experiment": "Password Security Validation",
         "test": "Registration API",
-        "total_requests": total,
-        "successful_logins": "",
-        "failed_logins": "",
-        "login_success_rate_percent": "",
-        "tests_passed": passed,
-        "tests_failed": failed,
-        "test_pass_rate_percent": round(
-            passed / total * 100, 2
+        "total_attempts": total,
+        "successful_authenticated_access": "",
+        "failed_or_unconfirmed_attempts": "",
+        "success_rate_percent": "",
+        "average_response_time_seconds": round(
+            mean(float(row["response_time_seconds"]) for row in rows),
+            6
         ),
-        "avg_response_time_seconds": round(
-            mean(response_times), 6
+        "rate_limit_retries": "",
+        "blocked_attempts": "",
+        "validation_tests_passed": passed,
+        "validation_tests_failed": total - passed,
+        "validation_pass_rate_percent": round(
+            passed / total * 100, 2
         ),
     }
 
 
 def generate_report():
-    metrics = [
-        analyze_attack(BRUTE_FORCE_FILE, "Brute Force"),
-        analyze_attack(DICTIONARY_FILE, "Dictionary"),
-        analyze_password_security(),
-    ]
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    fieldnames = list(metrics[0].keys())
+    metrics = []
+
+    for attack_name, before_file, after_file in EXPERIMENTS:
+        metrics.append(
+            analyze_attack(before_file, attack_name, "Before")
+        )
+
+        metrics.append(
+            analyze_attack(after_file, attack_name, "After")
+        )
+
+    metrics.append(analyze_password_security())
+
+    fieldnames = list(dict.fromkeys(
+        key for row in metrics for key in row
+    ))
 
     with OUTPUT_FILE.open(
         "w", newline="", encoding="utf-8"
@@ -116,36 +161,41 @@ def generate_report():
         writer.writerows(metrics)
 
     print("=" * 65)
-    print("ACTUAL API EXPERIMENT METRICS")
+    print("BEFORE-AND-AFTER API EXPERIMENT ANALYSIS")
     print("=" * 65)
 
     for result in metrics:
-        print(f"\nExperiment: {result['experiment']}")
+        print(f"\nPhase: {result['phase']}")
+        print(f"Experiment: {result['experiment']}")
         print(f"Test: {result['test']}")
 
         if result["experiment"] == "API Attack Test":
-            print(f"Total requests: {result['total_requests']}")
-            print(f"Successful logins: {result['successful_logins']}")
-            print(f"Failed logins: {result['failed_logins']}")
+            print(f"Total attempts: {result['total_attempts']}")
             print(
-                f"Login success rate: "
-                f"{result['login_success_rate_percent']}%"
+                "Successful authenticated access: "
+                f"{result['successful_authenticated_access']}"
             )
+            print(
+                "Failed or unconfirmed attempts: "
+                f"{result['failed_or_unconfirmed_attempts']}"
+            )
+            print(f"Success rate: {result['success_rate_percent']}%")
+            print(
+                "Average response time: "
+                f"{result['average_response_time_seconds']} seconds"
+            )
+            print(f"Rate-limit retries: {result['rate_limit_retries']}")
+            print(f"Blocked attempts: {result['blocked_attempts']}")
+
         else:
-            print(f"Total validation tests: {result['total_requests']}")
-            print(f"Tests passed: {result['tests_passed']}")
-            print(f"Tests failed: {result['tests_failed']}")
+            print(f"Validation tests passed: {result['validation_tests_passed']}")
+            print(f"Validation tests failed: {result['validation_tests_failed']}")
             print(
-                f"Test pass rate: "
-                f"{result['test_pass_rate_percent']}%"
+                f"Validation pass rate: "
+                f"{result['validation_pass_rate_percent']}%"
             )
 
-        print(
-            f"Average response time: "
-            f"{result['avg_response_time_seconds']} seconds"
-        )
-
-    print("\nConsolidated metrics saved to:")
+    print("\nComparison metrics saved to:")
     print(OUTPUT_FILE)
 
 

@@ -3,8 +3,15 @@
 API Brute Force Test
 CS2413 - Information Security Final Project
 
-Controlled brute-force testing against the local authentication API.
-Uses fictional test credentials and a small candidate list.
+Controlled brute-force testing against the combined local API.
+
+Features:
+- Uses fictional test credentials.
+- Retains session cookies.
+- Verifies access through /me.
+- Handles HTTP 429 and Retry-After.
+- Stops when account lockout prevents further testing.
+- Preserves previous experiment results.
 """
 
 import csv
@@ -12,12 +19,16 @@ import json
 import time
 import urllib.error
 import urllib.request
+import http.cookiejar
 from pathlib import Path
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 
 LOGIN_URL = "http://127.0.0.1:3000/login"
+ME_URL = "http://127.0.0.1:3000/me"
+
 TEST_EMAIL = "testuser@example.com"
 
-# Small, predefined candidate list for the local test account.
 PASSWORD_CANDIDATES = [
     "Password111!",
     "Password222!",
@@ -28,107 +39,260 @@ PASSWORD_CANDIDATES = [
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RESULTS_DIR = BASE_DIR / "results"
-OUTPUT_FILE = RESULTS_DIR / "api_brute_force_results.csv"
+
+OUTPUT_FILE = RESULTS_DIR / "api_brute_force_after_results.csv"
+
+MAX_429_RETRIES = 2
+MAX_WAIT_SECONDS = 65
+
+
+def send_request(opener, request):
+    """Send an HTTP request and return its response details."""
+
+    try:
+        with opener.open(request, timeout=15) as response:
+            return (
+                response.status,
+                response.read().decode("utf-8"),
+                response.headers
+            )
+
+    except urllib.error.HTTPError as error:
+        return (
+            error.code,
+            error.read().decode("utf-8"),
+            error.headers
+        )
+
+    except Exception as error:
+        print(f"Connection error: {error}")
+        return None, None, None
+
+
+def get_retry_delay(headers):
+    """Extract Retry-After from response headers."""
+
+    value = headers.get("Retry-After") if headers else None
+
+    if not value:
+        return None
+
+    try:
+        return max(0, int(value))
+    except ValueError:
+        try:
+            retry_time = parsedate_to_datetime(value)
+
+            if retry_time.tzinfo is None:
+                retry_time = retry_time.replace(tzinfo=timezone.utc)
+
+            return max(
+                0,
+                (retry_time - datetime.now(timezone.utc)).total_seconds()
+            )
+        except (TypeError, ValueError):
+            return None
 
 
 def attempt_login(email, password):
+    """Attempt one password and verify the resulting session."""
+
+    cookie_jar = http.cookiejar.CookieJar()
+
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(cookie_jar)
+    )
+
     payload = json.dumps({
         "email": email,
         "password": password
     }).encode("utf-8")
 
-    request = urllib.request.Request(
-        LOGIN_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    retries = 0
+    total_response_time = 0
 
-    start_time = time.perf_counter()
+    while True:
+        login_request = urllib.request.Request(
+            LOGIN_URL,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        start = time.perf_counter()
+
+        status, body, headers = send_request(
+            opener, login_request
+        )
+
+        total_response_time += time.perf_counter() - start
+
+        if status is None:
+            return None
+
+        if status != 429:
+            break
+
+        retry_delay = get_retry_delay(headers)
+
+        # Fallback for rate-limit responses without Retry-After.
+        if retry_delay is None:
+            retry_delay = 60
+
+        # Do not wait through the five-minute account lockout.
+        if retry_delay > MAX_WAIT_SECONDS:
+            return {
+                "login_status": status,
+                "me_status": None,
+                "mfa_required": False,
+                "authenticated_access": False,
+                "response_time": total_response_time,
+                "retries": retries,
+                "blocked": True,
+                "retry_after": retry_delay
+            }
+
+        if retries >= MAX_429_RETRIES:
+            return {
+                "login_status": status,
+                "me_status": None,
+                "mfa_required": False,
+                "authenticated_access": False,
+                "response_time": total_response_time,
+                "retries": retries,
+                "blocked": True,
+                "retry_after": retry_delay
+            }
+
+        retries += 1
+
+        print(
+            f"HTTP 429 received. "
+            f"Waiting {retry_delay:.0f} seconds before retry..."
+        )
+
+        time.sleep(retry_delay + 0.5)
 
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            status_code = response.status
+        login_data = json.loads(body or "{}")
+    except (json.JSONDecodeError, TypeError):
+        login_data = {}
 
-    except urllib.error.HTTPError as error:
-        status_code = error.code
+    mfa_required = login_data.get("mfaRequired", False)
 
-    except Exception as error:
-        print(f"Connection error: {error}")
-        return None, None
+    me_request = urllib.request.Request(
+        ME_URL,
+        headers={"Accept": "application/json"},
+        method="GET"
+    )
 
-    elapsed = time.perf_counter() - start_time
-    return status_code, elapsed
+    me_status, _, _ = send_request(opener, me_request)
+
+    if me_status is None:
+        return None
+
+    authenticated = (
+        status == 200
+        and not mfa_required
+        and me_status == 200
+    )
+
+    return {
+        "login_status": status,
+        "me_status": me_status,
+        "mfa_required": mfa_required,
+        "authenticated_access": authenticated,
+        "response_time": total_response_time,
+        "retries": retries,
+        "blocked": False,
+        "retry_after": 0
+    }
 
 
 def run_brute_force_test():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     results = []
-    successful_logins = 0
+    successful_access = 0
 
-    print("=" * 55)
+    print("=" * 60)
     print("API BRUTE FORCE TEST")
-    print("=" * 55)
+    print("=" * 60)
 
-    for attempt_number, password in enumerate(
+    for number, password in enumerate(
         PASSWORD_CANDIDATES, start=1
     ):
-        status_code, elapsed = attempt_login(
-            TEST_EMAIL, password
-        )
 
-        if status_code is None:
-            print("Test stopped because the API is unavailable.")
+        outcome = attempt_login(TEST_EMAIL, password)
+
+        if outcome is None:
+            print("Test stopped: API unavailable.")
             break
 
-        success = status_code == 200
+        success = outcome["authenticated_access"]
 
         if success:
-            successful_logins += 1
+            successful_access += 1
 
         results.append({
             "attack": "Brute Force",
-            "attempt": attempt_number,
-            "http_status": status_code,
-            "successful_login": success,
-            "response_time_seconds": round(elapsed, 6)
+            "attempt": number,
+            "login_http_status": outcome["login_status"],
+            "me_http_status": outcome["me_status"],
+            "mfa_required": outcome["mfa_required"],
+            "authenticated_access": success,
+            "response_time_seconds": round(
+                outcome["response_time"], 6
+            ),
+            "rate_limit_retries": outcome["retries"],
+            "blocked": outcome["blocked"],
+            "retry_after_seconds": outcome["retry_after"]
         })
 
         print(
-            f"Attempt {attempt_number}: "
-            f"HTTP {status_code}, "
-            f"Success: {success}, "
-            f"Time: {elapsed:.4f}s"
+            f"Attempt {number}: "
+            f"Login HTTP {outcome['login_status']}, "
+            f"/me HTTP {outcome['me_status']}, "
+            f"Authenticated: {success}, "
+            f"Retries: {outcome['retries']}"
         )
 
         if success:
-            print("\nPassword successfully guessed!")
+            print("Authenticated access confirmed!")
             break
 
-        time.sleep(0.5)
+        if outcome["blocked"]:
+            print("Testing stopped because the request was blocked.")
+            break
 
-    fieldnames = [
+    fields = [
         "attack",
         "attempt",
-        "http_status",
-        "successful_login",
-        "response_time_seconds"
+        "login_http_status",
+        "me_http_status",
+        "mfa_required",
+        "authenticated_access",
+        "response_time_seconds",
+        "rate_limit_retries",
+        "blocked",
+        "retry_after_seconds"
     ]
 
     with OUTPUT_FILE.open(
         "w", newline="", encoding="utf-8"
     ) as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+
+        writer = csv.DictWriter(
+            file,
+            fieldnames=fields
+        )
+
         writer.writeheader()
         writer.writerows(results)
 
-    print("\n" + "=" * 55)
-    print("BRUTE FORCE RESULTS")
-    print("=" * 55)
-    print(f"Total attempts: {len(results)}")
-    print(f"Successful logins: {successful_logins}")
-    print(f"Failed attempts: {len(results) - successful_logins}")
+    print("\nBRUTE FORCE SUMMARY")
+    print(f"Attempts: {len(results)}")
+    print(f"Confirmed authenticated access: {successful_access}")
     print(f"Results saved to: {OUTPUT_FILE}")
 
 

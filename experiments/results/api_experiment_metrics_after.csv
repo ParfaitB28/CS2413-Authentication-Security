@@ -1,0 +1,6 @@
+phase,experiment,test,total_attempts,successful_authenticated_access,failed_or_unconfirmed_attempts,success_rate_percent,average_response_time_seconds,rate_limit_retries,blocked_attempts,validation_tests_passed,validation_tests_failed,validation_pass_rate_percent
+Before,API Attack Test,Brute Force,5,1,4,20.0,0.060184,0,0,,,
+After,API Attack Test,Brute Force,5,1,4,20.0,0.079763,4,0,,,
+Before,API Attack Test,Dictionary,5,1,4,20.0,0.064562,0,0,,,
+After,API Attack Test,Dictionary,5,1,4,20.0,0.118928,4,0,,,
+Existing,Password Security Validation,Registration API,4,,,,0.065091,,,4,0,100.0

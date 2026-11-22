@@ -1,0 +1,6 @@
+attack,attempt,login_http_status,me_http_status,mfa_required,authenticated_access,response_time_seconds,rate_limit_retries,blocked,retry_after_seconds
+Dictionary,1,401,401,False,False,0.163239,0,False,0
+Dictionary,2,401,401,False,False,0.10756,1,False,0
+Dictionary,3,401,401,False,False,0.110607,1,False,0
+Dictionary,4,401,401,False,False,0.109635,1,False,0
+Dictionary,5,200,200,False,True,0.103597,1,False,0

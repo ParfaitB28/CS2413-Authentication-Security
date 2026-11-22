@@ -1,0 +1,6 @@
+attack,attempt,login_http_status,me_http_status,mfa_required,authenticated_access,response_time_seconds,rate_limit_retries,blocked,retry_after_seconds
+Brute Force,1,401,401,False,False,0.219715,0,False,0
+Brute Force,2,401,401,False,False,0.044239,1,False,0
+Brute Force,3,401,401,False,False,0.04832,1,False,0
+Brute Force,4,401,401,False,False,0.04269,1,False,0
+Brute Force,5,200,200,False,True,0.04385,1,False,0
