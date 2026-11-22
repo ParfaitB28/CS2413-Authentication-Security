@@ -45,10 +45,7 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-const { randomBytes, scrypt } = require('node:crypto');
-const { promisify } = require('node:util');
-const { error } = require('node:console');
-const hashPassword = promisify(scrypt);
+const { hashForStorage, verifyAgainstStorage } = require('./src/security/hashing');
 
 app.post('/register', express.json({ limit: '4kb' }), async (req, res) => {
   const { email, password } = req.body ?? {};
@@ -72,9 +69,7 @@ app.post('/register', express.json({ limit: '4kb' }), async (req, res) => {
   }
 
   try {
-    const salt = randomBytes(16);
-    const hash = await hashPassword(password, salt, 64);
-    const storedHash = `scrypt:${salt.toString('hex')}:${hash.toString('hex')}`;
+    const storedHash = await hashForStorage(password);
 
     const result = await db.query(
       `INSERT INTO users (email, password_hash)
@@ -122,15 +117,10 @@ if (lockoutStatus.locked || lockoutStatus.backoff) {
       [email.trim().toLowerCase()]
     );
 
-    const { timingSafeEqual } = require('node:crypto');
     const stored = result.rows[0]?.password_hash;
-    const [, saltHex, hashHex] = stored?.split(':') ?? [];
-    const salt = saltHex ? Buffer.from(saltHex, 'hex') : Buffer.alloc(16);
-    const expected = hashHex ? Buffer.from(hashHex, 'hex') : Buffer.alloc(64);
-    const actual = await hashPassword(password, salt, 64);
+    const passwordMatches = await verifyAgainstStorage(password, stored);
 
-    if (!stored || expected.length !== actual.length ||
-    !timingSafeEqual(expected, actual)) {
+    if (!passwordMatches) {
 
       const failureStatus = recordFailedLogin(normalizedEmail);
 

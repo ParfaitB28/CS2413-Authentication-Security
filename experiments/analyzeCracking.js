@@ -1,30 +1,18 @@
 'use strict';
 
-/**
- * experiments/analyzeCracking.js — turns raw cracker output into report metrics.
- *
- * After running Hashcat/John against the exported dumps, point this at the
- * potfile (or `hashcat --show` output) plus the seeded accounts, and it
- * computes the before/after numbers the rubric wants:
- *
- *   - % of dump cracked, overall and per strength tier
- *   - which specific accounts fell
- *   - time-to-first-crack (if a --status timestamp log is supplied)
- *
- * Usage:
- *   node experiments/analyzeCracking.js <accounts.json> <cracked.txt>
- *
- * <cracked.txt> format: one "hash:plaintext" or "username:plaintext" per line
- * (hashcat potfile style). Matching is done on plaintext, which is safe here
- * because this is a controlled lab dataset with known passwords.
- */
+// Reads the output of Hashcat/John and turns it into numbers for the report:
+// how many accounts were cracked overall and per strength tier, and which ones.
+// (If you use crackDump.js instead of Hashcat, you don't need this.)
+//
+// Run: node analyzeCracking.js <accounts.json> <cracked.txt>
+// cracked.txt is one "something:plaintext" per line (hashcat potfile style).
 
 const fs = require('fs');
 
 function parseArgs() {
   const [accFile, crackedFile] = process.argv.slice(2);
   if (!accFile || !crackedFile) {
-    console.error('usage: node experiments/analyzeCracking.js <accounts.json> <cracked.txt>');
+    console.error('usage: node analyzeCracking.js <accounts.json> <cracked.txt>');
     process.exit(1);
   }
   return { accFile, crackedFile };
@@ -35,7 +23,7 @@ function main() {
   const accounts = JSON.parse(fs.readFileSync(accFile, 'utf8'));
   const crackedRaw = fs.readFileSync(crackedFile, 'utf8');
 
-  // Collect recovered plaintexts (last field after ':').
+  // grab the recovered passwords (last field after ':')
   const recovered = new Set();
   for (const line of crackedRaw.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -76,7 +64,7 @@ function main() {
     console.log('\nNo accounts recovered in this run.');
   }
 
-  // Emit a machine-readable summary for charting in the report/slides.
+  // save a small summary file for making charts later
   const summary = {
     scheme: accounts[0] ? accounts[0].scheme : 'unknown',
     total,
