@@ -35,7 +35,7 @@ module.exports = {
 
   // Password strength rules.
   STRENGTH: {
-    minLength: 8,
+    minLength: 15,
     minZxcvbnScore: 3, // zxcvbn score is 0..4, we require at least 3
   },
 };
