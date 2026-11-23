@@ -3,8 +3,8 @@
 Password Security API Tests
 CS2413 - Information Security Final Project
 
-Tests password complexity, blocklist enforcement,
-case-insensitive blocklist matching, and valid registration.
+Tests registration password length, weak-password rejection,
+and successful registration using the integrated zxcvbn evaluator.
 """
 
 import csv
@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-LOGIN_URL = "http://127.0.0.1:3000/register"
+REGISTER_URL = "http://127.0.0.1:3000/register"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RESULTS_DIR = BASE_DIR / "results"
@@ -22,26 +22,20 @@ OUTPUT_FILE = RESULTS_DIR / "api_password_security_results.csv"
 
 TESTS = [
     {
+        "name": "Password Below Minimum Length",
+        "password": "Short123!",
+        "expected_status": 400,
+        "expected_text": "password between 15 and 128 characters."
+    },
+    {
         "name": "Weak Password",
-        "password": "weakpassword12345",
+        "password": "aaaaaaaaaaaaaaaa",
         "expected_status": 400,
         "expected_text": "Password does not meet security requirements."
     },
     {
-        "name": "Blocklisted Password",
-        "password": "Password123456!",
-        "expected_status": 400,
-        "expected_text": "This password is commonly used and is not allowed."
-    },
-    {
-        "name": "Case-Insensitive Blocklist",
-        "password": "pAssword123456!",
-        "expected_status": 400,
-        "expected_text": "This password is commonly used and is not allowed."
-    },
-    {
         "name": "Strong Password",
-        "password": "MyUniquePass987!",
+        "password": "vT#8pR^2mNb5&xQ1zL",
         "expected_status": 201,
         "expected_text": "Account created."
     }
@@ -57,7 +51,7 @@ def test_registration(test, index):
     }).encode("utf-8")
 
     request = urllib.request.Request(
-        LOGIN_URL,
+        REGISTER_URL,
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST"

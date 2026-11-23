@@ -1,28 +1,9 @@
+'use strict';
 
-const { validatePassword } = require("./passwordPolicy");
-const { isPasswordBlocklisted } = require("./passwordBlocklist");
+const { evaluate } = require('../passwordStrength');
 
-function checkPasswordSecurity(password) {
-    const policyResult = validatePassword(password);
-
-    if (!policyResult.valid) {
-        return {
-            valid: false,
-            errors: policyResult.errors
-        };
-    }
-
-    if (isPasswordBlocklisted(password)) {
-        return {
-            valid: false,
-            errors: ["This password is commonly used and is not allowed."]
-        };
-    }
-
-    return {
-        valid: true,
-        errors: []
-    };
+function checkPasswordSecurity(password, userInputs = []) {
+    return evaluate(password, userInputs);
 }
 
 module.exports = { checkPasswordSecurity };
